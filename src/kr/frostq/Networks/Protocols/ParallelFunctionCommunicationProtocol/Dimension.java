@@ -1,8 +1,6 @@
 package kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol;
 
-import java.util.Arrays;
-import java.util.Optional;
-import java.util.Vector;
+import java.util.*;
 
 import com.google.common.base.Preconditions;
 
@@ -18,7 +16,7 @@ public class Dimension {
 	public static final Vector<Dimension> allocated = new Vector<Dimension>();
 	
 	private byte[] name;
-	public static final Vector<Position> specified = new Vector<Position>();
+	public final Vector<Position> specified = new Vector<Position>();
 	
 	public Dimension(byte[] name) {
 		Preconditions.checkNotNull(name, "[CONST-DSM] Name cannot be null.");
@@ -33,6 +31,33 @@ public class Dimension {
 		this.name = name;
 		specified.clear();
 		allocated.addElement(this);
+	}
+	
+	public byte[] getName() {
+		return this.name;
+	}
+	
+	public void addPosition(Position pos) {
+		if(!specified.contains(pos) &&
+				!specified.parallelStream().anyMatch(anypos -> anypos.getID().equals(pos.getID())))
+			specified.addElement(pos);
+	}
+	
+	public void remPosition(Position pos) {
+		if(specified.contains(pos))
+			specified.removeElement(pos);
+	}
+	
+	public Position getById(byte[] id) {
+		Preconditions.checkNotNull(name, "[FIND-DSM] ID cannot be null.");
+		Optional<Position> optional = specified
+				.parallelStream()
+				.filter(anypos -> Arrays.equals(anypos.getID(), id))
+				.findFirst();
+		
+		if(optional.isPresent()) return
+				optional.get();
+		else return null;
 	}
 	
 	public static final Dimension getDimension(byte[] name) {

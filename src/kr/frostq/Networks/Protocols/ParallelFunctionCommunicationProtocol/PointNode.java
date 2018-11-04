@@ -1,6 +1,11 @@
 package kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol;
 
-import java.util.Vector;
+import java.io.IOException;
+import java.net.*;
+
+import com.google.common.base.Preconditions;
+
+import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.Packet.PFCPPacket;
 
 /**
  * 
@@ -14,17 +19,191 @@ import java.util.Vector;
  *
  */
 public abstract class PointNode {
-	private Vector<Position> pos = new Vector<Position>();
-	public Line[] contained;
-	
-	public PointNode(Position position) {
-		pos.setSize(1);
-		pos.setElementAt(position, 0);
+	public static InetAddress MULTICAST_ADDR1;
+	public static final int PORT = 3215;
+	public static ParagramSocket ALS;
+	static {
+		try {
+			MULTICAST_ADDR1 = InetAddress.getByName("232.45.145.141");
+			ALS = new ParagramSocket(InetAddress.getLocalHost(), PORT);
+		} catch(Exception e) {
+			System.err.println(e.getMessage());
+		}
 	}
 	
-	public void send(PointNode node, byte[] data) {
+	//public Line[] contained;
+	
+	private Position pos;
+	
+	private ParagramSocket LLS;
+	private InetAddress local;
+	private boolean isTarget = false;
+	
+	public PointNode(Position position, boolean isTarget) {
+		try {
+			this.local = InetAddress.getLocalHost();
+		} catch (UnknownHostException e1) {
+			e1.printStackTrace();
+		}
+		this.isTarget = isTarget;
+		
+		if(!isTarget) {
+			try {
+				LLS = ALS;
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public PointNode(InetAddress inet, Position position, boolean isTarget) {
+		this.local = inet;
+		this.isTarget = isTarget;
+		
+		if(!isTarget) {
+			try {
+				LLS = new ParagramSocket(this.local, PORT);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	protected void connect() {
 		
 	}
 	
-	public abstract void receive(PointNode source, byte[] data);
+	public Position getPosition() {
+		return pos;
+	}
+	
+	public static final PointNode getBroadcastNode(byte[] dimensionName, int dimensions) {
+		double[] data = new double[dimensions];
+		for(int i = 0; i < dimensions; i++)
+			data[i] = Double.MAX_VALUE;
+		
+		return new PointNode(new Position(Position.BROADCAST_ID, dimensionName, dimensions, data), true) {
+			@Override
+			public void receive(PFCPPacket packet) {}
+		};
+	}
+	
+	public void broadcast(PFCPPacket packet) throws Throwable {
+		Preconditions.checkArgument(!isTarget, "PointNode {" + getPosition() + "} is targetable only.");
+		if(LLS == null) {
+			pos.disable();
+			Preconditions.checkNotNull(LLS, "PointNode {" + getPosition() + "} 's ParagramSocket is null!");
+		}
+		transmitPacket(this, getBroadcastNode(packet.getSrc().getDimensionName(), packet.getSrc().getPos().length), packet);
+	}
+	
+	public void exchange(PointNode dst, PFCPPacket packet) throws Throwable {
+		Preconditions.checkArgument(!isTarget, "PointNode {" + getPosition() + "} is targetable only.");
+		if(LLS == null) {
+			pos.disable();
+			Preconditions.checkNotNull(LLS, "PointNode {" + getPosition() + "} 's ParagramSocket is null!");
+		}
+		transmitPacket(this, dst, packet);
+	}
+	
+	public static final void transmitPacket(PointNode src, PointNode dst, PFCPPacket packet) throws Throwable {
+		Preconditions.checkArgument(!src.isTarget, "PointNode {" + src.getPosition() + "} is targetable only.");
+		if(src.LLS == null) {
+			src.pos.disable();
+			Preconditions.checkNotNull(src.LLS, "PointNode {" + src.getPosition() + "} 's ParagramSocket is null!");
+		}
+		// packet.type = 0xFF;
+		
+		packet.setSrc(src.getPosition()).setDst(dst.getPosition());
+		
+		byte[] bytes = packet.createPacketBytes();
+		src.LLS.send1(MULTICAST_ADDR1, PORT, bytes, 0, bytes.length);
+	}
+	
+	public abstract void receive(PFCPPacket packet);
+	
+	public static class ParagramSocket extends MulticastSocket {
+		private Thread recvThr;
+		
+		public ParagramSocket(int port) throws IOException {
+			super(port);
+			
+			setReceiveBufferSize(2560);
+			setSendBufferSize(2560);
+			
+			join();
+		}
+		
+		public ParagramSocket(InetAddress srcAddr, int srcport) throws IOException {
+			super(new InetSocketAddress(srcAddr, srcport));
+			join();
+		}
+		
+		private void join() {
+			try {
+				this.joinGroup(MULTICAST_ADDR1);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		private void leave() {
+			try {
+				this.leaveGroup(MULTICAST_ADDR1);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		public void send0(InetAddress inet, int port, byte[] data, int offset, int length) throws IOException {
+			Preconditions.checkNotNull(inet, "[PTND-PGSKT-sendtarget] Target InetAddress is null.");
+			Preconditions.checkNotNull(data, "[PTND-PGSKT-sendtarget] Data is null!");
+			this.send(new DatagramPacket(data, offset, length, inet, port));
+		}
+		
+		public ParagramSocket send1(InetAddress inet, int port, byte[] data, int offset, int length) throws IOException {
+			send0(inet, port, data, offset, length);
+			return this;
+		}
+		
+		public void startOwnReceiver(final PointNode node, Runnable runnable) {
+			// node.receive(packet);
+			
+			if(runnable != null)
+				runnable = () -> {
+					try {
+						byte[] buf = new byte[2560];
+						DatagramPacket pac = new DatagramPacket(buf, buf.length);
+						
+						while(true) {
+							this.receive(pac);
+							
+							PFCPPacket p = null;
+							try {
+								p = new PFCPPacket(pac.getData());
+							} catch (Exception e) {
+								System.err.println(e.getMessage());
+							}
+							
+							Preconditions.checkState(p != null, "[PTND-PGSKT-receive] Packet is null. Was there any error?");
+							node.receive(p);
+							BroadcastRadar.received(p, true);
+						}
+					} catch(Exception e) {
+						System.err.println(e.getMessage());
+						// Error handler
+					}
+				};
+				
+			recvThr = new Thread(runnable, "PointNode " + node.getPosition().getID() + "{" + node.getPosition() + "} UDP Receiver Thread");
+			recvThr.setPriority(3);
+			recvThr.start();
+		}
+		
+		@Override
+		public void close() {
+			leave();
+			super.close();
+		}
+	}
 }

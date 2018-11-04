@@ -6,59 +6,82 @@ import java.nio.charset.Charset;
 import java.util.Arrays;
 import com.google.common.base.Preconditions;
 
-import kr.frostq.Axis.ThreadManager;
+import kr.frostq.Utils.ByteUtils;
+import kr.frostq.Utils.ThreadManager;
 
 /**
  * 
- * Position
+ * <h1>Position</h1> <br />
  * 
- * Position is a network address in the PFCP network, that rules of a plane or a space that has many applicable dimensions.
+ * Position is a network address in the PFCP network, that rules of a plane or a space that has many applicable dimensions. <br /> <br />
  * 
- * || Rational Number (유리수)
- * ||| Irrational Number (무리수)
- * |||| Real Number (실수)
- * ||||| Imaginary Number (허수)
- * |||||| Complex Number (복소수)
+ * || Rational Number (유리수) <br />
+ * ||| Irrational Number (무리수) <br />
+ * |||| Real Number (실수) <br />
+ * ||||| Imaginary Number (허수) <br />
+ * |||||| Complex Number (복소수) <br />
  * 
- * 1. 복소수 평면에서 어떻게 할까?
+ * 1. 복소수 평면에서 어떻게 할까? <br />
  * 2. 실수 평면에서 3차원으로 허수 평면을 이용해 확장? | f(x) = x^2 + 1
  * 
  * @author FrostQ
  *
  */
 public class Position {
-	private byte[] name;
+	public static final byte[] BROADCAST_ID = new byte[] {
+			0xFFFFFFFF,
+			0xFFFFFFFF,
+			0xFFFFFFFF,
+			0xFFFFFFFF,
+			0xFFFFFFFF,
+			0xFFFFFFFF,
+			0xFFFFFFFF,
+			0xFFFFFFFF
+	};
+	
+	private byte[] id, name;
 	private double[] position;
 	
-	public Position(byte[] name, int dimensions, double[] data) {
+	public Position(byte[] id, byte[] name, int dimensions, double[] data) {
+		Preconditions.checkNotNull(id, "[CONST-PST] ID cannot be null.");
 		Preconditions.checkNotNull(name, "[CONST-PST] Name cannot be null.");
 		Preconditions.checkArgument(dimensions >= 1, "[CONST-PST] Dimension of a plane or a space has to be over or equals with 1.");
 		Preconditions.checkNotNull(data, "[CONST-PST] Data cannot also be null.");
 		Preconditions.checkState(data.length == dimensions, "[CONST-PST] Dimension has to be equivalent with data's length.");
 		Preconditions.checkArgument(Dimension.isAllocated(name), "Dimension [" + name + "] does not exist.");
 		
+		this.id = id;
 		this.name = name;
 		position = new double[dimensions];
 		System.arraycopy(data, 0, position, 0, dimensions);
-		// Dimension.getDimension(name).
+		lesserPosition(this);
+		Dimension.getDimension(name).addPosition(this);
+	}
+	
+	public byte[] getData() {
+		byte[] result = new byte[id.length + name.length + 8 * position.length];
+		
+		System.arraycopy(id, 0, result, 0, id.length);
+		System.arraycopy(name, 0, result, id.length, name.length);
+		for(int i = 0; i < position.length; i++)
+			System.arraycopy(ByteUtils.toByteArray(position[i]), 0, result, id.length + name.length + 8 * i, 8);
+		
+		return result;
+	}
+	
+	public double[] getPos() {
+		return this.position;
 	}
 	
 	public void move(double data[]) {
-		Position pos = new Position(this.name, this.position.length, data);
-		compareLength(pos);
-		move0(pos);
-		disable();
+		Preconditions.checkArgument(position.length == data.length, "[MOVE-PST] The length of the position to move has to be equivalent with the first position's.");
+		this.position = data;
 	}
 	
-	public void copy(double data[]) {
-		Position pos = new Position(this.name, this.position.length, data);
+	public Position copy(byte[] newid, double data[]) {
+		Position pos = new Position(newid, this.name, this.position.length, data);
 		compareLength(pos);
-		move0(pos);
-	}
-	
-	private void move0(Position p) {
-		compareLength(p);
-		slightlyMove(p, 1, variatedDistance(this, p), 200, null);
+		return pos;
 	}
 	
 	/**
@@ -139,6 +162,7 @@ public class Position {
 	
 	private double add(double value, int index) {
 		position[index] = position[index] += value;
+		lesserPosition(this);
 		return position[index];
 	}
 	
@@ -179,12 +203,65 @@ public class Position {
 		return value < 0;
 	}
 	
-	private void disable() {
-		// Dimension.getDimension(name).
+	public byte[] getID() {
+		return this.id;
+	}
+	
+	public byte[] getDimensionName() {
+		return this.name;
+	}
+	
+	public double sum() {
+		double sum = 0;
+		for(double p : position)
+			sum += p;
+		return sum;
+	}
+	
+	public void disable() {
+		Dimension.getDimension(this.name).remPosition(this);
+		this.id = this.name = null;
+		this.position = null;
 	}
 	
 	private void compareLength(Position p) {
-		Preconditions.checkNotNull(p.position, "[PST-CMP] Data cannot also be null.");
+		Preconditions.checkNotNull(p.position != null, "[PST-CMP] Data cannot also be null.");
 		Preconditions.checkState(p.position.length == position.length, "[PST-CMP] Dimension has to be equivalent with data's length.");
+	}
+	
+	public static final void lesserPosition(Position pos) {
+		for(int i = 0; i < pos.position.length; i++)
+			pos.position[i] = Double.parseDouble(String.format("%.10f", pos.position[i]));
+	}
+	
+	public static final Position getPosition(byte[] data, int posIdSize, int posNameSize) {
+		int poscount = (data.length - posIdSize - posNameSize) / 8;
+		double[] position = new double[poscount];
+		byte[] id = new byte[posIdSize], name = new byte[posNameSize];
+		byte[][] dposition = new byte[poscount][8];
+		
+		System.arraycopy(data, 0, id, 0, posIdSize);
+		System.arraycopy(data, posIdSize, name, 0, posNameSize);
+		
+		for(int i = 0; i < poscount; i++)
+			System.arraycopy(data, posIdSize + posNameSize + 8 * i, dposition[i], 0, 8);
+		
+		for(int i = 0; i < poscount; i++)
+			position[i] = ByteUtils.toDouble(dposition[i]);
+		
+		return new Position(id, name, poscount, position);
+	}
+	
+	@Override
+	public String toString() {
+		String result = "";
+		lesserPosition(this);
+		
+		for(int i = 0; i < position.length; i++)
+			if(i == position.length - 1)
+				result += position[i];
+			else result += position[i] + "-";
+		
+		return result;
 	}
 }
