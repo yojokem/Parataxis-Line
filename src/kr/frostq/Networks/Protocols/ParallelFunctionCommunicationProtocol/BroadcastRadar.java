@@ -7,6 +7,7 @@ import java.util.Vector;
 import kr.frostq.Axis.PathConstants;
 import kr.frostq.Axis.Synchronization;
 import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.Packet.PFCPPacket;
+import kr.frostq.Utils.ByteUtils;
 import kr.frostq.Utils.PathStreamer;
 
 public class BroadcastRadar {
@@ -19,7 +20,7 @@ public class BroadcastRadar {
 		
 		Synchronization.processSync(Synchronization.sync(() -> {
 			if(pkt.isBroadcast()) transprocess(pkt);
-			if(fs) savePacket(pkt);
+			//if(fs) savePacket(pkt);
 		}));
 	}
 	
@@ -46,8 +47,15 @@ public class BroadcastRadar {
 	}
 	
 	public static class ARFPacket extends PFCPPacket {
+		public static final byte[]
+				prefix = ByteUtils.str2bytes("[ARF]"),
+				suffix = ByteUtils.str2bytes("[/ARF]");
+		
 		public static final int CONNECT_FLAG = 0xFFFFE;
 		public static final int DISCONNECT_FLAG = 0xFFFFF;
+		
+		@Deprecated
+		public static final int WHOAREYOU = 0xABCDE;
 		
 		public static final int OKAY = 0x00;
 		public static final int ACCEPT = 0x03;
@@ -56,6 +64,24 @@ public class BroadcastRadar {
 		
 		public ARFPacket() {
 			super.setPktId(0xAAAAAAAA);
+			super.setEncoding(PFCPPacket.RAW);
+			super.setEncrypted(PFCPPacket.DECRYPTED);
+			super.setType((byte) 0x01);
+			super.setRange(1);
+		}
+		
+		public ARFPacket setFlag(int flag) {
+			setPayload(ByteUtils.intToBytes(flag));
+			return this;
+		}
+		
+		public static int getFlag(byte[] flagdata) {
+			return ByteUtils.bytesToInt(flagdata);
+		}
+		
+		public void broadcast(final PointNode node) throws Throwable {
+			super.setSrc(node.getPosition());
+			node.broadcast(this);
 		}
 	}
 }

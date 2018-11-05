@@ -1,8 +1,24 @@
 package kr.frostq.Utils;
 
 import java.nio.*;
+import java.nio.charset.Charset;
 
 public class ByteUtils {
+	public static final void printBytes16Bit(byte[] bit) {
+		String r = "";
+		for(byte b : bit)
+			r += String.format("%02x", b) + " ";
+		System.out.println(r);
+	}
+	
+	public static byte[] str2bytes(String str) {
+		return str.getBytes(Charset.forName("UTF-8"));
+	}
+	
+	public static String bytes2str(byte[] data) {
+		return new String(data, Charset.forName("UTF-8"));
+	}
+	
 	public static byte[] intToBytes(final int i) {
 		ByteBuffer buffer = ByteBuffer.allocate(Integer.SIZE / 8);
 		buffer.putInt(i);

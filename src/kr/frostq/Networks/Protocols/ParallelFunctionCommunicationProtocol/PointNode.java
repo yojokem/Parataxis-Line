@@ -40,6 +40,7 @@ public abstract class PointNode {
 	private boolean isTarget = false;
 	
 	public PointNode(Position position, boolean isTarget) {
+		this.pos = position;
 		try {
 			this.local = InetAddress.getLocalHost();
 		} catch (UnknownHostException e1) {
@@ -57,6 +58,7 @@ public abstract class PointNode {
 	}
 	
 	public PointNode(InetAddress inet, Position position, boolean isTarget) {
+		this.pos = position;
 		this.local = inet;
 		this.isTarget = isTarget;
 		
@@ -71,6 +73,15 @@ public abstract class PointNode {
 	
 	protected void connect() {
 		
+	}
+	
+	public byte[] getNodeID() {
+		byte[] result = new byte[pos.getDimensionName().length + pos.getID().length];
+		
+		System.arraycopy(pos.getDimensionName(), 0, result, 0, pos.getDimensionName().length);
+		System.arraycopy(pos.getID(), 0, result, pos.getDimensionName().length, pos.getID().length);
+		
+		return result;
 	}
 	
 	public Position getPosition() {
@@ -89,12 +100,7 @@ public abstract class PointNode {
 	}
 	
 	public void broadcast(PFCPPacket packet) throws Throwable {
-		Preconditions.checkArgument(!isTarget, "PointNode {" + getPosition() + "} is targetable only.");
-		if(LLS == null) {
-			pos.disable();
-			Preconditions.checkNotNull(LLS, "PointNode {" + getPosition() + "} 's ParagramSocket is null!");
-		}
-		transmitPacket(this, getBroadcastNode(packet.getSrc().getDimensionName(), packet.getSrc().getPos().length), packet);
+		exchange(getBroadcastNode(packet.getSrc().getDimensionName(), packet.getSrc().getPos().length), packet);
 	}
 	
 	public void exchange(PointNode dst, PFCPPacket packet) throws Throwable {
@@ -122,15 +128,15 @@ public abstract class PointNode {
 	
 	public abstract void receive(PFCPPacket packet);
 	
+	public void startOwnReceiver(Runnable run) {
+		this.LLS.startOwnReceiver(this, run);
+	}
+	
 	public static class ParagramSocket extends MulticastSocket {
 		private Thread recvThr;
 		
 		public ParagramSocket(int port) throws IOException {
 			super(port);
-			
-			setReceiveBufferSize(2560);
-			setSendBufferSize(2560);
-			
 			join();
 		}
 		
@@ -167,37 +173,45 @@ public abstract class PointNode {
 		}
 		
 		public void startOwnReceiver(final PointNode node, Runnable runnable) {
+			Preconditions.checkNotNull(node, "[PTND-PGSKT-startreceiver] Given PointNode is null! What is hell of you su**?");
+			
 			// node.receive(packet);
 			
-			if(runnable != null)
+			if(runnable == null)
 				runnable = () -> {
 					try {
-						byte[] buf = new byte[2560];
+						byte[] buf = new byte[1024];
 						DatagramPacket pac = new DatagramPacket(buf, buf.length);
 						
 						while(true) {
 							this.receive(pac);
-							
 							PFCPPacket p = null;
 							try {
-								p = new PFCPPacket(pac.getData());
+								p = new PFCPPacket(pac.getData(), pac.getOffset(), pac.getLength());
 							} catch (Exception e) {
-								System.err.println(e.getMessage());
+								e.printStackTrace();
 							}
 							
-							Preconditions.checkState(p != null, "[PTND-PGSKT-receive] Packet is null. Was there any error?");
-							node.receive(p);
+							Preconditions.checkNotNull(p, "[PTND-PGSKT-receive] Packet is null. Was there any error?");
+							
+							if(!node.isTarget) node.receive(p);
 							BroadcastRadar.received(p, true);
+							/*ThreadManager.runThread(ThreadManager.createThread(() -> {}, "[PTND-PGSKT-receive-handle-" + new String(node.getNodeID()) + "] Default Receiver PGSKT#" + this.hashCode()), 5);*/
 						}
 					} catch(Exception e) {
 						System.err.println(e.getMessage());
 						// Error handler
 					}
 				};
-				
-			recvThr = new Thread(runnable, "PointNode " + node.getPosition().getID() + "{" + node.getPosition() + "} UDP Receiver Thread");
-			recvThr.setPriority(3);
-			recvThr.start();
+			
+			try {
+				recvThr = new Thread(runnable, "PointNode " + node.getPosition().getID() + "{" + node.getPosition() + "} UDP Receiver Thread");
+				recvThr.setPriority(3);
+				recvThr.start();
+			} catch (Exception e) {
+				System.err.println(e.getMessage());
+				return;
+			}
 		}
 		
 		@Override

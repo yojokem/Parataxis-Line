@@ -12,9 +12,9 @@ import kr.frostq.Utils.ByteUtils;
 
 public class PFCPPacket {
 	public static final int[] RESERVED = new int[] {
-			0x00000000,
-			0xAAAAAAAA,
-			0xFFFFFFFF
+			0x00000000, // 
+			0xAAAAAAAA, // ARF ID
+			0xFFFFFFFF  // 
 	};
 	
 	private int pktId;
@@ -107,7 +107,10 @@ public class PFCPPacket {
 		
 	}
 	
-	public PFCPPacket(byte[] data) {
+	public PFCPPacket(byte[] received, int off, int len) {
+		byte[] data = new byte[len];
+		System.arraycopy(received, off, data, 0, len);
+		
 		byte[] tempInt = new byte[4];
 		byte[] tempLd = new byte[8];
 		
@@ -133,7 +136,10 @@ public class PFCPPacket {
 		System.arraycopy(data, data.length - 4 * 8, tempInt, 0, 4);
 		packet_size = ByteUtils.bytesToInt(tempInt);
 		
-		Preconditions.checkArgument(packet_size == data.length, "[CONST-PFCPP] Packet size does not match in the data of the packet, constructor - packet data compiliation error.");
+		Preconditions.checkArgument(packet_size == data.length, "[CONST-PFCPP] Packet size does not match in the data of the packet, constructor - packet data compiliation error." + System.lineSeparator() +
+				"Packet Size : " + packet_size + " | Packet bytes length : " + data.length + System.lineSeparator());
+		
+		// ByteUtils.printBytes16Bit(data);
 		
 		System.arraycopy(data, data.length - 4 * 7, tempInt, 0, 4);
 		srcPosSize = ByteUtils.bytesToInt(tempInt);
@@ -182,7 +188,8 @@ public class PFCPPacket {
 		tempInt = tempLd = null;
 		
 		this.setPktId(pktId);
-		this.setSrc(src).setDst(dst);
+		this.setSrc(src);
+		this.setDst(dst);
 		this.setEncrypted(encrypted);
 		this.setEncoding(encoding);
 		this.setType(type);
@@ -377,10 +384,14 @@ public class PFCPPacket {
 			}
 			
 			sum -= (src.sum() + dst.sum());
-			sum += (int) type;
+			sum += type;
 			
 			setChk2((int) sum);
 		}
+	}
+	
+	public static final int MINIMUMSIZE() {
+		return 4 + 10 + 10 + 1 + 1 + 1 + 0 + 4 + 8 + 4 * 9;
 	}
 	
 	public final boolean isBroadcast() {

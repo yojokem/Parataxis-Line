@@ -6,11 +6,13 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Clock;
-import java.util.Arrays;
 
+import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.BroadcastRadar.ARFPacket;
 import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.Dimension;
+import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.PointNode;
 import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.Position;
 import kr.frostq.Networks.Protocols.ParallelFunctionCommunicationProtocol.Packet.PFCPPacket;
+import kr.frostq.Utils.ThreadManager;
 
 public class LauncherTest {
 	public static void main(String[] args) throws SocketException {
@@ -19,9 +21,9 @@ public class LauncherTest {
 		Position p2 = new Position("B".getBytes(), new byte[] {1}, 2, new double[] {312.5555, 0});
 		
 		double distance = Position.variatedDistance(p1, p2);
-		System.out.println("거리: " + distance);
+		/*System.out.println("거리: " + distance);
 		System.out.println(d.getById("A".getBytes()));
-		System.out.println(d.getById("B".getBytes()));
+		System.out.println(d.getById("B".getBytes()));*/
 		
 		//p1.slightlyMove(p2, 0.0277775 / distance, distance, 0, System.out);
 		
@@ -39,15 +41,45 @@ public class LauncherTest {
 			e.printStackTrace(System.err);
 			p.setPayload(new byte[] {1,2,3,4});
 		}
+		p.setPayload(new byte[]{12,23,14, 2, 3, 32, 15, 3, 0});
 		
 		byte[] cc = p.createPacketBytes();
 		
-		PFCPPacket pp = new PFCPPacket(cc);
-		System.out.println(Arrays.equals(p.getPayload(), pp.getPayload()));
+		PFCPPacket pp = new PFCPPacket(cc, 0, cc.length);
+		//System.out.println(Arrays.equals(p.getPayload(), pp.getPayload()));
 		
 		long now2 = Clock.systemUTC().millis();
 		
-		System.out.println((now2 - now1));
+		//System.out.println((now2 - now1));
+		
+		PointNode a = new PointNode(p1, false) {
+			@Override
+			public void receive(PFCPPacket packet) {
+				System.out.println("A received: " + packet.getIDByStr());
+			}
+		};
+		
+		PointNode b = new PointNode(p2, false) {
+			@Override
+			public void receive(PFCPPacket packet) {
+				System.out.println("B received: " + packet.getIDByStr());
+			}
+		};
+		
+		b.startOwnReceiver(null);
+		
+		ThreadManager.runThread(ThreadManager.createThread(() -> {
+			try {
+				Thread.sleep(2000);
+				a.broadcast(p);
+				Thread.sleep(2000);
+				ARFPacket arf = new ARFPacket();
+				arf.setFlag(ARFPacket.OKAY);
+				arf.broadcast(a);
+			} catch (Throwable e) {
+				e.printStackTrace();
+			}
+		}, "Sender"), 2);
 	}
 	
 	public static final void testUDP() throws Exception {
