@@ -21,7 +21,7 @@ public class LauncherTest {
 		Position p2 = new Position("B".getBytes(), new byte[] {1}, 2, new double[] {312.5555, 0});
 		
 		double distance = Position.variatedDistance(p1, p2);
-		/*System.out.println("�Ÿ�: " + distance);
+		/*System.out.println("°Å¸®: " + distance);
 		System.out.println(d.getById("A".getBytes()));
 		System.out.println(d.getById("B".getBytes()));*/
 		
@@ -36,7 +36,7 @@ public class LauncherTest {
 		p.setEncrypted(PFCPPacket.DECRYPTED);
 		p.setType((byte) 0x01);
 		try {
-			p.setPayload(Files.readAllBytes(Paths.get("C:\\Users\\Stockholm\\Desktop\\Arma 3.txt")));
+			p.setPayload(Files.readAllBytes(Paths.get("C:\\Users\\**************\\Desktop\\Arma 3.txt")));
 		} catch (IOException e) {
 			e.printStackTrace(System.err);
 			p.setPayload(new byte[] {1,2,3,4});
@@ -107,7 +107,7 @@ public class LauncherTest {
 		
 		DatagramSocket s = new DatagramSocket();
 		
-		String s2 = "�ȳ��ϼ���";
+		String s2 = "¾È³çÇÏ¼¼¿ä";
 		s.send(new DatagramPacket(s2.getBytes(Charset.forName("UTF-8")), s2.getBytes(Charset.forName("UTF-8")).length, InetAddress.getLocalHost(), 3213));
 		s.close();
 	}
