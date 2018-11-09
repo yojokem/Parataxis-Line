@@ -100,6 +100,7 @@ public abstract class PointNode {
 	}
 	
 	public void broadcast(PFCPPacket packet) throws Throwable {
+		packet.setType(PFCPPacket.TYPE[1]);
 		exchange(getBroadcastNode(packet.getSrc().getDimensionName(), packet.getSrc().getPos().length), packet);
 	}
 	
@@ -128,13 +129,11 @@ public abstract class PointNode {
 	
 	public abstract void receive(PFCPPacket packet);
 	
-	public void startOwnReceiver(Runnable run) {
-		this.LLS.startOwnReceiver(this, run);
+	public Thread startOwnReceiver(Runnable run) {
+		return this.LLS.startOwnReceiver(this, run);
 	}
 	
 	public static class ParagramSocket extends MulticastSocket {
-		private Thread recvThr;
-		
 		public ParagramSocket(int port) throws IOException {
 			super(port);
 			join();
@@ -172,7 +171,9 @@ public abstract class PointNode {
 			return this;
 		}
 		
-		public void startOwnReceiver(final PointNode node, Runnable runnable) {
+		public Thread startOwnReceiver(final PointNode node, Runnable runnable) {
+			Thread recvThr;
+			
 			Preconditions.checkNotNull(node, "[PTND-PGSKT-startreceiver] Given PointNode is null! What is hell of you su**?");
 			
 			// node.receive(packet);
@@ -205,13 +206,15 @@ public abstract class PointNode {
 				};
 			
 			try {
-				recvThr = new Thread(runnable, "PointNode " + node.getPosition().getID() + "{" + node.getPosition() + "} UDP Receiver Thread");
+				recvThr = new Thread(runnable, "PointNode " + new String(node.getPosition().getID()) + ":" + new String(node.getPosition().getDimensionName()) + "{" + node.getPosition() + "} UDP Receiver Thread");
 				recvThr.setPriority(3);
 				recvThr.start();
 			} catch (Exception e) {
 				System.err.println(e.getMessage());
-				return;
+				return null;
 			}
+			
+			return recvThr;
 		}
 		
 		@Override

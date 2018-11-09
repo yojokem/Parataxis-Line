@@ -395,7 +395,10 @@ public class PFCPPacket {
 	}
 	
 	public final boolean isBroadcast() {
-		return Arrays.stream(RESERVED).anyMatch(reserved -> reserved == getPktId());
+		return
+				Arrays.stream(RESERVED).anyMatch(reserved -> reserved == getPktId()) ||
+				this.type == TYPE[1] ||
+				Arrays.stream(this.dst.getPos()).anyMatch(somepos -> somepos == Double.MAX_VALUE);
 	}
 	
 	public final boolean isExchange() {
@@ -403,6 +406,11 @@ public class PFCPPacket {
 	}
 	
 	public String getIDByStr() {
-		return String.format("%10d", this.pktId);
+		return String.format("%010x", this.pktId).toUpperCase();
+	}
+	
+	public String getTypeByStr() {
+		if(type == TYPE[0]) return "Exchange";
+		else return "Broadcast";
 	}
 }

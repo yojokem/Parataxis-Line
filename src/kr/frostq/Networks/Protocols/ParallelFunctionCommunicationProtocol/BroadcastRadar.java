@@ -71,7 +71,14 @@ public class BroadcastRadar {
 		}
 		
 		public ARFPacket setFlag(int flag) {
-			setPayload(ByteUtils.intToBytes(flag));
+			byte[] data = ByteUtils.intToBytes(flag);
+			byte[] result = new byte[prefix.length + data.length + suffix.length];
+			
+			System.arraycopy(prefix, 0, result, 0, prefix.length);
+			System.arraycopy(data, 0, result, prefix.length, data.length);
+			System.arraycopy(suffix, 0, result, prefix.length + data.length, suffix.length);
+			
+			setPayload(result);
 			return this;
 		}
 		

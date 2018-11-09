@@ -36,12 +36,12 @@ public class LauncherTest {
 		p.setEncrypted(PFCPPacket.DECRYPTED);
 		p.setType((byte) 0x01);
 		try {
-			p.setPayload(Files.readAllBytes(Paths.get("C:\\Users\\Stockholm\\Desktop\\1000%.txt")));
+			p.setPayload(Files.readAllBytes(Paths.get("C:\\Users\\Stockholm\\Desktop\\Arma 3.txt")));
 		} catch (IOException e) {
 			e.printStackTrace(System.err);
 			p.setPayload(new byte[] {1,2,3,4});
 		}
-		p.setPayload(new byte[]{12,23,14, 2, 3, 32, 15, 3, 0});
+		//p.setPayload(new byte[]{12,23,14, 2, 3, 32, 15, 3, 0});
 		
 		byte[] cc = p.createPacketBytes();
 		
@@ -50,7 +50,7 @@ public class LauncherTest {
 		
 		long now2 = Clock.systemUTC().millis();
 		
-		//System.out.println((now2 - now1));
+		System.out.println((now2 - now1));
 		
 		PointNode a = new PointNode(p1, false) {
 			@Override
@@ -63,16 +63,18 @@ public class LauncherTest {
 			@Override
 			public void receive(PFCPPacket packet) {
 				System.out.println("B received: " + packet.getIDByStr());
+				System.out.println(packet.getPacketSize());
+				System.out.println(packet.getTypeByStr());
 			}
 		};
 		
-		b.startOwnReceiver(null);
+		Thread aRecv = a.startOwnReceiver(null);
+		Thread bRecv = b.startOwnReceiver(null);
 		
 		ThreadManager.runThread(ThreadManager.createThread(() -> {
 			try {
-				Thread.sleep(2000);
-				a.broadcast(p);
-				Thread.sleep(2000);
+				b.exchange(a, p);
+				a.exchange(b, p);
 				ARFPacket arf = new ARFPacket();
 				arf.setFlag(ARFPacket.OKAY);
 				arf.broadcast(a);
